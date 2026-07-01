@@ -11,6 +11,7 @@
 </p>
 
 <p align="center">
+  <a href="https://skills.sh/mathofdynamic/better-call-behdad"><img src="https://skills.sh/b/mathofdynamic/better-call-behdad" alt="skills.sh"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-supported-6c47ff" alt="Claude Code">
   <img src="https://img.shields.io/badge/OpenAI%20Codex-supported-10a37f" alt="Codex">
@@ -167,11 +168,17 @@ not just promised by a prompt:
 
 Full instructions for both hosts are in [`INSTALL.md`](INSTALL.md). Short version:
 
-### Claude Code
+### Quickest — via the [skills](https://skills.sh) CLI
+```bash
+npx skills add mathofdynamic/better-call-behdad -a claude-code
+```
+Installs the skill + inspector agents onto Claude Code (or `-a codex`, `-a opencode`, …).
+
+### Full install — adds the fix-gate hook + `/behdad` command
 ```bash
 git clone https://github.com/mathofdynamic/better-call-behdad.git
 cd better-call-behdad
-python platform/claude/install.py        # installs the skill, agents, /behdad command, and fix-gate hook
+python platform/claude/install.py        # skill, agents, /behdad command, and the PreToolUse fix-gate hook
 ```
 Then, in a **new** session:
 ```
