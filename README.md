@@ -54,6 +54,9 @@ for a lot of trust, using a layered false-positive defense (details [below](#how
 
 ## How it works
 
+> 🗺️ **[Explore the flow interactively on MarkChart →](https://markchart.pages.dev/s/5DTWTdHFSHE)**
+> &nbsp;(source: [`docs/flow.markchart`](docs/flow.markchart))
+
 ```
   /behdad <project>
       │
