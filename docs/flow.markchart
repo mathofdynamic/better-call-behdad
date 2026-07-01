@@ -1,0 +1,35 @@
+# Better-call-behdad audit flow
+> From /behdad to fixed, with a human approval gate
+
+[start]    begin: User runs /behdad on a project
+[process]  scope: 0 - Understand and scope
+[process]  scan: 1 - Deterministic scan with real tools
+[process]  inspect: 2 - Inspect (7 specialists run in parallel)
+[process]  critic: 3 - Critic gate (verify findings, drop false positives)
+[process]  aggregate: 4 - Aggregate (dedup, rank by risk, gate low confidence)
+[process]  reports: Two reports - Full Diagnostic and Prioritized Action
+[decision] approve: 5 - You approve the fixes?
+[process]  remediate: 6 - Remediate (snapshot, apply, verify)
+[decision] verify: Verification passes?
+[process]  kept: Fix kept
+[process]  rollback: Auto-rollback (reported honestly)
+[process]  stop: Stop - nothing is changed
+[process]  learn: 7 - Learn (remember dismissed findings)
+[end]      done: Done
+
+begin -> scope
+scope -> scan
+scan -> inspect
+inspect -> critic
+critic -> aggregate
+aggregate -> reports
+reports -> approve
+approve -> remediate : Yes
+approve -> stop : No
+remediate -> verify
+verify -> kept : Yes
+verify -> rollback : No
+kept -> learn
+rollback -> learn
+stop -> learn
+learn -> done

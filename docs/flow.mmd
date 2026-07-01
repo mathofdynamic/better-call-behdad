@@ -1,0 +1,20 @@
+%% Better-call-behdad — end-to-end audit flow
+%% Clean, plain-text labels (no <br/>, no & entities, no emojis) so it imports well.
+%% Ready to transliterate to MarkChart once the FLOW_FORMAT spec is available.
+flowchart TD
+    A[User runs /behdad on a project] --> B[0 Understand and scope]
+    B --> C[1 Deterministic scan with real tools]
+    C --> D[2 Inspect - 7 specialists run in parallel]
+    D --> E[3 Critic gate - verify each finding, drop false positives]
+    E --> F[4 Aggregate - dedup, rank by real risk, gate low confidence]
+    F --> G[Two reports - Full Diagnostic plus Prioritized Action]
+    G --> H{5 You approve the fixes?}
+    H -- No --> X[Stop - nothing is changed]
+    H -- Yes --> I[6 Remediate - snapshot, apply, verify]
+    I --> J{Verification passes?}
+    J -- Yes --> K[Fix kept]
+    J -- No --> L[Auto-rollback, reported honestly]
+    K --> M[7 Learn - remember dismissed findings]
+    L --> M
+    X --> M
+    M --> N[Done]
