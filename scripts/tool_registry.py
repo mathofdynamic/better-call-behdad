@@ -9,8 +9,44 @@ never silent). It has no third-party dependencies (stdlib only) so it runs anywh
 
 from __future__ import annotations
 
+import os
 import shutil
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
+
+
+def _augment_path() -> None:
+    """
+    Make scanners discoverable even when their install dir isn't on PATH — so the user never has
+    to fiddle with environment variables. pip/npm frequently install console scripts into dirs
+    that aren't on PATH by default (a classic Windows papercut). We add the common ones if they
+    exist, without disturbing the user's real environment beyond this process.
+    """
+    home = Path.home()
+    ver = f"{sys.version_info.major}{sys.version_info.minor}"
+    candidates = [
+        # Python user/base script dirs (pip installs: ruff, bandit, semgrep)
+        Path(sys.prefix) / "Scripts",
+        Path(sys.prefix) / "bin",
+        home / "AppData" / "Roaming" / "Python" / f"Python{ver}" / "Scripts",  # Windows user
+        home / ".local" / "bin",                                                # Linux/mac user
+        home / "Library" / "Python" / f"{sys.version_info.major}.{sys.version_info.minor}" / "bin",
+        # npm globals (eslint, pyright, tsc)
+        home / "AppData" / "Roaming" / "npm",                                   # Windows
+        Path("/usr/local/bin"), Path("/opt/homebrew/bin"),                      # mac/linux
+    ]
+    parts = os.environ.get("PATH", "").split(os.pathsep)
+    have = {p for p in parts if p}
+    for c in candidates:
+        s = str(c)
+        if c.is_dir() and s not in have:
+            parts.append(s)
+            have.add(s)
+    os.environ["PATH"] = os.pathsep.join(parts)
+
+
+_augment_path()
 
 
 @dataclass(frozen=True)

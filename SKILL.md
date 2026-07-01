@@ -67,7 +67,9 @@ The manager dedups by `(canonical_id, file, line)`, ranks by `risk_score` (blend
 CVSS×EPSS×reachability per `config/severity.yaml`), and produces a report per
 `schemas/report.schema.json`: a **Full Diagnostic Report** (what's wrong) + a **Prioritized
 Action Report** (what to do), each finding tagged with canonical IDs and a plain-language
-explanation for developers who "don't know what they don't know."
+explanation for developers who "don't know what they don't know." The report also carries a
+`measurement` block ("scanners raised N, Behdad reported M, X% filtered as noise") so the run
+**self-reports how it did** — the user never runs a separate measurement tool.
 
 **5 — Human gate (STOP).**
 Present both reports. Ask for explicit confirmation before ANY change. On Claude Code the

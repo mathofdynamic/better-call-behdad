@@ -55,11 +55,17 @@ Before aggregating, apply the target's learned suppressions so dismissed finding
 ```
 python "$BEHDAD_HOME/scripts/suppressions.py" apply --target <target> --findings <scratch>/all_findings.json --out <scratch>/suppressed.json
 ```
-Then aggregate. It deterministically: drops non-reportable findings (rejected/abstain/suppressed/
-below the confidence gate, with a ground-truth bypass), dedups by `(aspect, canonical_ids, file,
-line)` merging sources and computing `agreement`, computes blended `risk_score` (severity × EPSS ×
+Then aggregate, passing the raw scanner count from step 1 (`--raw-count <N>`, the number of findings
+in `scan.json`) so the report includes the **noise-reduction metric automatically**:
+```
+python "$BEHDAD_HOME/scripts/aggregate.py" <scratch>/suppressed.json --raw-count <N> --target <target> --depth <depth> --out reports/report.json
+```
+It deterministically: drops non-reportable findings (rejected/abstain/suppressed/below the
+confidence gate, with a ground-truth bypass), dedups by `(aspect, canonical_ids, file, line)`
+merging sources and computing `agreement`, computes blended `risk_score` (severity × EPSS ×
 reachability × aspect-scale per `config/severity.yaml`), ranks, and emits the report skeleton
-(summary, findings, ordered action_plan). Read the result and:
+(summary, findings, ordered action_plan, and a `measurement` block: raw N → reported M, % filtered
+as noise). Read the result and:
 - Fill in `scope` (languages, aspects_run, aspects_skipped, tools_used, tools_missing) from steps 0–1.
 - Enrich each `action_plan` item's `action`/`effort` in plain language where the skeleton is terse.
 - Produce a report per `schemas/report.schema.json`:
@@ -84,6 +90,12 @@ snapshots touched files, applies the diff with `git apply`, runs the verificatio
 command, or a re-run of the relevant scanner). Report each fix's outcome honestly — including
 rollbacks and failures. Never claim a fix succeeded if verification didn't pass.
 
+After applying fixes, **re-run the deterministic scan** on the target and record the before/after
+into the report's `measurement.remediation`: `findings_before` (raw count from step 1),
+`findings_after` (the fresh count), `resolved`, `introduced` (new findings — a regression signal,
+should be 0), and `tests_before`/`tests_after` if a test command exists. This before/after is part
+of Behdad's own output — the user never runs a separate measurement tool.
+
 ### 7. Learn
 For every finding the user dismisses as a false positive or won't-fix, run
 `python "$BEHDAD_HOME/scripts/suppressions.py" add --target <t> --finding <f.json> --reason "<why>"` so it is
@@ -93,3 +105,13 @@ auto-suppressed on future runs.
 Write for a developer who "doesn't know what they don't know." Lead with the verdict. Explain each
 risk in plain terms (what could go wrong, why it matters). Be honest about coverage gaps. Never
 inflate — if the project is broadly healthy, say so plainly.
+
+Always include a short **"How this audit performed"** section, straight from the report's
+`measurement` block, so the user can judge the run without any extra tooling:
+- *Noise control:* "Scanners raised N raw findings; after verification Behdad reported M (X% filtered
+  as noise; K rejected by the critic)." — this is Behdad's core value, shown every run.
+- *Coverage:* languages covered, aspects skipped, and any missing scanners (reduced recall).
+- *After fixes (if any):* "Resolved R findings, introduced 0 new ones, tests still green." from
+  `measurement.remediation`.
+The optional `tests/eval/measure.py` harness exists only for rigorous benchmarking; a normal
+`/behdad` run self-reports these numbers with no user commands.

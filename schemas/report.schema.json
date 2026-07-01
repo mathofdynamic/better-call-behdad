@@ -89,6 +89,33 @@
         }
       }
     },
+    "measurement": {
+      "type": "object",
+      "description": "Behdad's self-reported 'how did it do' numbers, computed automatically during the run — no external tooling required.",
+      "additionalProperties": true,
+      "properties": {
+        "raw_scanner_findings": { "type": "integer", "description": "Total raw findings the scanners produced (the 'before Behdad's brain' count)." },
+        "reported_findings": { "type": "integer", "description": "Findings Behdad actually surfaced after verification/gating." },
+        "filtered_as_noise": { "type": "integer" },
+        "noise_reduction_pct": { "type": "number", "description": "Percent of raw scanner output suppressed as noise." },
+        "rejected_by_critic": { "type": "integer" },
+        "abstained": { "type": "integer" },
+        "remediation": {
+          "type": "object",
+          "description": "Before/after remediation deltas, filled in after fixes are applied.",
+          "additionalProperties": false,
+          "properties": {
+            "findings_before": { "type": "integer" },
+            "findings_after": { "type": "integer" },
+            "resolved": { "type": "integer" },
+            "introduced": { "type": "integer", "description": "New findings after fixes — a regression signal; should be 0." },
+            "tests_before": { "type": ["boolean", "null"] },
+            "tests_after": { "type": ["boolean", "null"] }
+          }
+        }
+      },
+      "default": {}
+    },
     "audit_trail": {
       "type": "object",
       "description": "Provenance for reproducibility and debugging.",

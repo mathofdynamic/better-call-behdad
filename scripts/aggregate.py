@@ -191,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", help="Write report JSON here (default: stdout)")
     ap.add_argument("--target", default="", help="Target repo path (for report.target)")
     ap.add_argument("--depth", default="quick")
+    ap.add_argument("--raw-count", type=int, default=None,
+                    help="Raw scanner finding count (from scan.json) — enables the auto noise-reduction metric")
     args = ap.parse_args(argv)
 
     data = json.loads(Path(args.findings).read_text(encoding="utf-8"))
@@ -199,6 +201,20 @@ def main(argv: list[str] | None = None) -> int:
     report = aggregate(findings)
     report["target"] = {"path": args.target}
     report.setdefault("scope", {"languages": [], "aspects_run": [], "depth": args.depth})
+
+    # Self-reported measurement: how much raw scanner noise the precision layer removed.
+    # This makes "how did it do?" part of the skill's own output — no external tool needed.
+    if args.raw_count is not None:
+        reported = len(report["findings"])
+        filtered = max(0, args.raw_count - reported)
+        report["measurement"] = {
+            "raw_scanner_findings": args.raw_count,
+            "reported_findings": reported,
+            "filtered_as_noise": filtered,
+            "noise_reduction_pct": round(100 * filtered / args.raw_count, 1) if args.raw_count else 0.0,
+            "rejected_by_critic": report["audit_trail"].get("rejected_count", 0),
+            "abstained": report["audit_trail"].get("abstained_count", 0),
+        }
 
     text = json.dumps(report, indent=2)
     if args.out:

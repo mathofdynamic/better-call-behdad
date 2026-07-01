@@ -1,0 +1,62 @@
+# Trying Behdad on a project
+
+The whole point is that it's a **skill you just run**. No PATH setup, no scripts to operate.
+
+## 1. Install (once)
+
+```bash
+git clone https://github.com/mathofdynamic/better-call-behdad.git
+cd better-call-behdad
+python platform/claude/install.py
+```
+
+Optional but recommended — install the scanners for full recall. Behdad **auto-discovers** them
+even if they aren't on your PATH:
+
+```bash
+pip install ruff bandit semgrep
+```
+
+## 2. Run it
+
+In a **new** Claude Code session:
+
+```
+/behdad C:\path\to\your-project
+```
+
+…or just ask: *"audit this project with behdad."* You can even run it from inside the project
+directory and say *"audit this project."*
+
+That's it. Behdad will:
+1. scan your project with real tools,
+2. run its inspector agents + the critic gate,
+3. show you a **Full Diagnostic Report** and a **Prioritized Action Report**, and
+4. **stop and ask** before changing anything.
+
+## 3. Read how it did — it tells you itself
+
+Every run ends with a **"How this audit performed"** section, computed automatically:
+
+- **Noise control:** *"Scanners raised 43 raw findings; after verification Behdad reported 6
+  (86% filtered as noise)."* — this is the whole value proposition, shown every time.
+- **Coverage:** which languages/aspects were covered, and any missing scanners (honest reduced-recall note).
+- **After fixes** (if you approve any): *"Resolved 5 findings, introduced 0 new ones, tests still green."*
+
+No separate tool, no spreadsheets. If you approve fixes, they're applied on a snapshot, verified,
+and **auto-rolled-back** if anything breaks.
+
+## Before you let it fix things
+
+Run it on a project that's **committed to git** (or backed up). Behdad only edits after you
+approve and rolls back broken fixes automatically — but a clean git state is always the right
+safety net before any tool touches your code.
+
+---
+
+### For maintainers: rigorous benchmarking (optional)
+
+If you want hard precision/recall numbers across many projects (not needed for normal use), there's
+a benchmark harness under [`tests/eval/`](../tests/eval): `measure.py` (before/after snapshots,
+triage, scoring) and `run_eval.py` (the deterministic KPI scorecard). These are for evaluating
+Behdad itself, not for end users auditing their code.
