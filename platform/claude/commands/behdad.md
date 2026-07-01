@@ -1,6 +1,6 @@
 ---
 description: Audit a project with Behdad — security, quality, correctness, and more; report, then fix on confirmation.
-argument-hint: "[this | path/to/project] [--depth quick|thorough]"
+argument-hint: "[this | path/to/project] [--since last-run] [--depth quick|thorough]"
 ---
 
 Run a **Better-call-behdad** audit.
@@ -10,6 +10,10 @@ Run a **Better-call-behdad** audit.
   audit the **current working directory** (run `pwd` to get its absolute path).
 - Otherwise treat the (first) argument as the path to the project to audit.
 - Any `--depth quick|thorough` may appear alongside; default to `quick`.
+- **Incremental:** if `--since last-run` (or `--since <git-ref>`) is present, pass it through to the
+  scanner so Behdad only re-checks files changed since its last run (or that ref) and reports a
+  New / Fixed / Still-open delta. Without it, a full audit runs. Behdad remembers each run in
+  `<target>/.behdad/last-run.json`, and always saves the report to `<target>/.behdad/report-latest.md`.
 
 Confirm the resolved absolute target path back to the user in one line before you start
 (e.g. "Auditing: C:\\Users\\...\\my-project") so there's no ambiguity about what's being scanned.

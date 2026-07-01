@@ -80,8 +80,11 @@ Apply approved fixes via `scripts/remediate.py`: stage them (git branch/stash if
 git, else file-snapshot backup), re-run tests + scanners, and **roll back automatically if
 verification fails.** Report the outcome faithfully — if a fix broke something, say so.
 
-**7 — Learn.**
-Persist dismissed findings to `.behdad/suppressions.json` in the target repo so they don't recur.
+**7 — Learn & remember.**
+Persist dismissed findings to `.behdad/suppressions.json` so they don't recur. Every run also saves
+a durable Markdown report to `.behdad/report-latest.md` and records `.behdad/last-run.json` (commit +
+findings) so the next run can go **incremental**: `--since last-run` scopes the scan to changed files
+and reports a New / Fixed / Still-open delta.
 
 ## Non-negotiables
 - Ground findings in evidence; a finding with no concrete evidence is not reported.

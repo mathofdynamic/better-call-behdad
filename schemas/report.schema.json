@@ -116,6 +116,24 @@
       },
       "default": {}
     },
+    "delta": {
+      "type": "object",
+      "description": "Incremental-run comparison against the previous audit (from .behdad/last-run.json).",
+      "additionalProperties": true,
+      "properties": {
+        "counts": {
+          "type": "object",
+          "properties": {
+            "new": { "type": "integer", "description": "Findings not present last run." },
+            "fixed": { "type": "integer", "description": "Findings present last run, gone now." },
+            "still_open": { "type": "integer", "description": "Findings present in both runs." }
+          }
+        },
+        "new": { "type": "array", "items": {} },
+        "fixed": { "type": "array", "items": {} }
+      },
+      "default": {}
+    },
     "audit_trail": {
       "type": "object",
       "description": "Provenance for reproducibility and debugging.",

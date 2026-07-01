@@ -29,8 +29,11 @@ Run:
 ```
 python "$BEHDAD_HOME/scripts/run_scanners.py" <target> --depth <depth> --out <scratch>/scan.json
 ```
+**Incremental mode:** if the user asked to only check changes (`--since <ref>` or `--since
+last-run`), pass that flag through. `last-run` uses the commit from `<target>/.behdad/last-run.json`;
+the scan is then scoped to changed files only (much faster). If nothing changed, say so and stop.
 Read the envelope. Capture `tools_used` and `tools_missing` — you MUST report missing tools as a
-reduced-recall caveat. Group the normalized findings by `aspect` for hand-off.
+reduced-recall caveat. Note `scoped`/`scope_note`. Group the normalized findings by `aspect` for hand-off.
 
 ### 2. Fan-out to inspectors
 For each selected inspector, spawn its subagent **in parallel** (single message, multiple Agent
@@ -59,10 +62,12 @@ Before aggregating, apply the target's learned suppressions so dismissed finding
 python "$BEHDAD_HOME/scripts/suppressions.py" apply --target <target> --findings <scratch>/all_findings.json --out <scratch>/suppressed.json
 ```
 Then aggregate, passing the raw scanner count from step 1 (`--raw-count <N>`, the number of findings
-in `scan.json`) so the report includes the **noise-reduction metric automatically**:
+in `scan.json`) so the report includes the **noise-reduction metric automatically**. If a prior run
+exists (`<target>/.behdad/last-run.json`), also pass `--baseline` to get the New/Fixed/Still-open delta:
 ```
-python "$BEHDAD_HOME/scripts/aggregate.py" <scratch>/suppressed.json --raw-count <N> --target <target> --depth <depth> --out reports/report.json
+python "$BEHDAD_HOME/scripts/aggregate.py" <scratch>/suppressed.json --raw-count <N> --baseline <target>/.behdad/last-run.json --scan <scratch>/scan.json --target <target> --depth <depth> --out reports/report.json
 ```
+(Omit `--baseline` if there is no prior run.)
 It deterministically: drops non-reportable findings (rejected/abstain/suppressed/below the
 confidence gate, with a ground-truth bypass), dedups by `(aspect, canonical_ids, file, line)`
 merging sources and computing `agreement`, computes blended `risk_score` (severity × EPSS ×
@@ -77,6 +82,21 @@ as noise). Read the result and:
   - **Prioritized Action Report**: ordered `action_plan` — for each, what to do, the risk if
     ignored, effort, and whether Behdad has a safe auto-fix diff.
 - Write the report JSON to `reports/` and present a readable summary to the user.
+
+**Always save a durable Markdown report into the audited project** (so the user can read later what
+Behdad found and recommended — do this every run, before the human gate, regardless of whether any
+fix is applied):
+```
+python "$BEHDAD_HOME/scripts/render_report.py" reports/report.json --target <target>
+```
+This writes `<target>/.behdad/report-<timestamp>.md` and `<target>/.behdad/report-latest.md`.
+
+**Record the run state** so the next `--since last-run` and delta work:
+```
+python "$BEHDAD_HOME/scripts/runstate.py" --target <target> --report reports/report.json --depth <depth>
+```
+If the report has a `delta` block, lead your spoken summary with it ("Since your last run: N new,
+M fixed, K still open").
 
 ### 5. Human gate — STOP
 Present both reports. Ask for explicit confirmation before ANY change. Offer choices: apply all

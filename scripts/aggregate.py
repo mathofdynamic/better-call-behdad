@@ -193,6 +193,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--depth", default="quick")
     ap.add_argument("--raw-count", type=int, default=None,
                     help="Raw scanner finding count (from scan.json) — enables the auto noise-reduction metric")
+    ap.add_argument("--baseline", default=None,
+                    help="Path to a prior .behdad/last-run.json to compute a New/Fixed/Still-open delta")
+    ap.add_argument("--scan", default=None,
+                    help="Path to scan.json — if it was a scoped (--since) run, makes the delta scope-aware")
     args = ap.parse_args(argv)
 
     data = json.loads(Path(args.findings).read_text(encoding="utf-8"))
@@ -215,6 +219,23 @@ def main(argv: list[str] | None = None) -> int:
             "rejected_by_critic": report["audit_trail"].get("rejected_count", 0),
             "abstained": report["audit_trail"].get("abstained_count", 0),
         }
+
+    # Incremental delta: compare the reported findings against a prior run's snapshot.
+    if args.baseline:
+        try:
+            prev = json.loads(Path(args.baseline).read_text(encoding="utf-8")).get("findings", [])
+            # If this was a scoped (--since) run, only files in scan.changed_files were re-checked.
+            scope_files = None
+            if args.scan:
+                env = json.loads(Path(args.scan).read_text(encoding="utf-8"))
+                if env.get("scoped"):
+                    scope_files = env.get("changed_files", [])
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import runstate  # noqa: E402
+            d = runstate.delta(prev, report["findings"], scope_files=scope_files)
+            report["delta"] = {"counts": d["counts"], "new": d["new"], "fixed": d["fixed"]}
+        except Exception as exc:
+            report["delta"] = {"error": f"could not compute delta: {exc}"}
 
     text = json.dumps(report, indent=2)
     if args.out:
