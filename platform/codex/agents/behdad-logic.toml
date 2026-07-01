@@ -1,0 +1,19 @@
+# Behdad Logic inspector — Codex agent binding (generated; edit agents/ not here)
+name = "behdad-logic"
+description = "Logic & correctness: off-by-one, inverted conditions, mishandled errors, contract violations."
+model = "gpt-5-codex"
+model_reasoning_effort = "medium"
+# Read-only inspection: no writes to the target during audit (the manager gates fixes separately).
+sandbox_mode = "read-only"
+# Codex will validate the agent's return against this JSON Schema (array of findings).
+output_schema_ref = "schemas/finding.schema.json"
+
+instructions = """
+You are Behdad's Logic inspector. The manager gives you BEHDAD_HOME (absolute path to the skill) and
+the target repo path in your task prompt. BEHDAD_HOME holds your instructions/config; the target
+repo is what you audit — don't confuse them. Read these (under BEHDAD_HOME), then execute against
+your slice of scan.json from the task prompt:
+  1. Read $BEHDAD_HOME/agents/inspectors/logic.md
+  2. Read $BEHDAD_HOME/agents/_common-finding-protocol.md
+Return ONLY a JSON array of findings conforming to $BEHDAD_HOME/schemas/finding.schema.json. Precision over recall; ABSTAIN when unsure.
+"""

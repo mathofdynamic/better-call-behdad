@@ -1,0 +1,64 @@
+# Better-call-behdad — Risk scoring model
+#
+# Blended risk, NOT raw CVSS. Both research efforts converged on prioritizing by
+# CVSS (technical severity) x EPSS (exploit likelihood) x environmental reachability,
+# because CVSS alone over-ranks unreachable issues and under-ranks cheap-to-exploit ones.
+#
+#   risk_score = cvss_norm * epss * environmental
+#
+# All three factors are in [0,1]; risk_score is in [0,1]. The manager sorts the action
+# plan by risk_score, then by (agreement * confidence) as a tiebreak.
+
+version: "1.0"
+
+# Map the qualitative severity band to a normalized CVSS-like base weight in [0,1].
+# Used when a precise CVSS vector is unavailable (the common case for LLM findings).
+severity_weight:
+  critical: 1.00
+  high:     0.75
+  medium:   0.50
+  low:      0.25
+  info:     0.05
+
+# EPSS (Exploit Prediction Scoring System) probability in [0,1].
+# For dependency findings we look up real EPSS by CVE (supply-chain inspector).
+# For code findings with no CVE, fall back to a category prior below.
+epss:
+  lookup_by_cve: true
+  default_when_unknown: 0.30      # neutral prior; do not over/under weight unknowns
+  category_priors:                # rough priors by CWE class when no CVE exists
+    CWE-89:  0.70                 # SQL injection — commonly exploited
+    CWE-79:  0.60                 # XSS
+    CWE-78:  0.70                 # OS command injection
+    CWE-22:  0.55                 # path traversal
+    CWE-502: 0.65                 # unsafe deserialization
+    CWE-798: 0.60                 # hardcoded credentials
+    CWE-306: 0.55                 # missing authentication
+
+# Environmental / reachability multiplier in [0,1].
+# Set by the critic during verification. Unreachable code is heavily discounted so it
+# never crowds out reachable criticals in the action plan.
+environmental:
+  reachable_from_entrypoint: 1.00
+  reachable_internal_only:   0.60
+  reachability_unknown:      0.50   # neutral when the critic couldn't determine it
+  unreachable_dead_code:     0.10
+
+# Non-security aspects (quality/logic/testing/perf/a11y) have no CVSS/EPSS. They use
+# severity_weight directly as risk_score, scaled by this factor so a genuine critical
+# security bug outranks a "high" maintainability smell by default.
+non_security_scale:
+  security:      1.00
+  logic:         0.90            # correctness bugs are nearly as important as security
+  supply-chain:  0.90
+  quality:       0.55
+  testing:       0.55
+  performance:   0.60
+  accessibility: 0.50
+
+# Confidence gate: findings below this confidence are held back from the report unless
+# they are ground-truth (scanner-anchored) or the user opts into low-confidence findings.
+confidence_gate:
+  min_to_report: 0.55
+  ground_truth_bypass: true       # scanner-anchored findings surface even if LLM is unsure
+  abstain_shown: false            # ABSTAIN findings never surface to the user by default

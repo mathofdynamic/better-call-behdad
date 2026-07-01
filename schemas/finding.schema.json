@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://better-call-behdad/schemas/finding.schema.json",
+  "title": "Behdad Finding",
+  "description": "A single typed, evidence-grounded audit finding. This is the interface passed between inspectors, the critic, and the manager. Also usable as a Codex output_schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "aspect", "title", "severity", "confidence", "file", "evidence", "detected_by", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable identifier for this finding. Deterministic hash of (aspect,file,line,canonical_ids) is preferred over random so re-runs can be diffed."
+    },
+    "aspect": {
+      "type": "string",
+      "enum": ["security", "quality", "logic", "performance", "testing", "supply-chain", "accessibility"],
+      "description": "Which inspector domain produced this finding."
+    },
+    "title": {
+      "type": "string",
+      "description": "Short one-line summary of the issue."
+    },
+    "canonical_ids": {
+      "type": "array",
+      "description": "Canonical standard identifiers for traceability and dedup, e.g. CWE-89, OWASP-A03, ASVS-V5.3.4, WCAG-1.1.1.",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "info"],
+      "description": "Technical severity band."
+    },
+    "risk_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Blended risk = f(CVSS, EPSS, environmental) per config/severity.yaml. Used for ranking. 0 if not computed.",
+      "default": 0
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Calibrated confidence that this finding is a true positive. Findings that ABSTAIN set status=abstain and low confidence."
+    },
+    "file": {
+      "type": "string",
+      "description": "Repo-relative path of the file the finding anchors to."
+    },
+    "line": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "1-indexed line the finding anchors to. 0 if file-level / not line-specific.",
+      "default": 0
+    },
+    "evidence": {
+      "type": "string",
+      "description": "Concrete evidence: the offending code snippet plus a specific explanation of why it is a problem. No hand-waving."
+    },
+    "detected_by": {
+      "type": "array",
+      "description": "Sources that flagged this: scanner rule IDs (e.g. semgrep:python.lang.security.audit), inspector name, and voter IDs.",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "agreement": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Fraction of independent sources/voters that flagged this same finding. Drives consensus ranking.",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": ["candidate", "verified", "rejected", "abstain", "suppressed"],
+      "description": "candidate = raw inspector output; verified = survived the critic gate; rejected = killed by critic; abstain = inspector was unsure; suppressed = matched a learned suppression."
+    },
+    "verification": {
+      "type": "object",
+      "description": "How the critic tried to prove/refute this finding.",
+      "additionalProperties": false,
+      "properties": {
+        "method": { "type": "string", "description": "reachability | call-chain | repro-test | dataflow | none" },
+        "reachable": { "type": ["boolean", "null"], "default": null },
+        "notes": { "type": "string", "default": "" }
+      },
+      "default": {}
+    },
+    "proposed_fix": {
+      "type": "string",
+      "description": "Unified diff that would remediate the finding. Empty if no safe automated fix is available.",
+      "default": ""
+    },
+    "explanation_for_humans": {
+      "type": "string",
+      "description": "Plain-language explanation of the risk aimed at developers who don't know what they don't know. Why it matters, what could go wrong."
+    },
+    "ground_truth": {
+      "type": "boolean",
+      "description": "True if this finding is anchored to a deterministic scanner result (highest trust); false if it is a pure-LLM reasoning finding (must clear the hardest verification).",
+      "default": false
+    }
+  }
+}

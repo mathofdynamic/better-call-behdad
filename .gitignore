@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.venv/
+venv/
+
+# Behdad run artifacts
+scan.json
+*.scan.json
+.behdad/
+reports/*.json
+!reports/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Personal source photos (Behdad) — the generated banner (assets/banner.png) is published instead
+*.jpg
+*.jpeg

@@ -1,0 +1,16 @@
+{
+  "_comment": "Merge this into .claude/settings.json (project) or ~/.claude/settings.json (user) to enable Behdad's execution-layer fix gate. The hook is inert unless BEHDAD_ACTIVE=1, so it is safe to leave installed. Adjust the path to gate.py to wherever the skill lives.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/platform/claude/hooks/gate.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

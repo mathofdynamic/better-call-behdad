@@ -1,0 +1,142 @@
+# Better-call-behdad — Inspector registry
+# The single source of truth mapping each inspector aspect to its standards,
+# ground-truth tools, machine-checkable signals, and the judgment the LLM must add.
+# The manager reads this to decide which inspectors to spawn (scope routing) and
+# which scanners to run. Keep tool names in sync with scripts/tool_registry.py.
+
+version: "1.0"
+
+# Global routing: an aspect is only run if the repo contains files matching its
+# `applies_when` globs. This is the primary cost governor (skip inapplicable aspects).
+inspectors:
+
+  - id: security
+    title: Security
+    model_tier: standard          # cheaper tier for breadth; manager/critic use high tier
+    standards: [OWASP-Top-10-2021, OWASP-ASVS, CWE-Top-25-2024, NIST-SSDF-800-218]
+    applies_when: ["**/*"]         # always relevant
+    tools: [semgrep, bandit, gitleaks, codeql]   # codeql only in `thorough` depth
+    machine_checkable:
+      - injection sinks (SQLi/command/XSS) via taint rules
+      - hardcoded secrets / credentials
+      - known-insecure API usage
+    llm_judgment:
+      - broken access control / authorization gaps
+      - insecure design & missing defense-in-depth
+      - business-logic auth bypass
+    priority: 1
+
+  - id: quality
+    title: Code Quality & Maintainability
+    model_tier: standard
+    standards: [ISO-IEC-25010, SOLID, Clean-Code]
+    applies_when: ["**/*"]
+    tools: [ruff, eslint]          # plus complexity/MI metrics computed in run_scanners
+    machine_checkable:
+      - lint violations
+      - cyclomatic complexity thresholds (McCabe > 10 warn, > 15 high)
+      - maintainability index bands
+      - dead code / unused symbols
+    llm_judgment:
+      - SOLID adherence
+      - code-smell severity in context
+      - naming / abstraction quality
+    priority: 3
+
+  - id: logic
+    title: Logic & Correctness
+    model_tier: standard
+    standards: []                  # weakest deterministic backstop -> hardest critic gate
+    applies_when: ["**/*"]
+    tools: [mypy, pyright, tsc]    # type-checkers as partial ground truth; may be absent
+    machine_checkable:
+      - type errors
+      - unreachable code / always-true conditions (linter-detected)
+    llm_judgment:
+      - off-by-one, wrong operator, inverted condition
+      - incorrect error handling / swallowed exceptions
+      - does the code actually do what its name/docstring claims
+    priority: 2
+    high_hallucination_risk: true  # flag: treat findings most skeptically, strongest verification
+
+  - id: performance
+    title: Performance & Resource Use
+    model_tier: standard
+    standards: []
+    applies_when: ["**/*"]
+    tools: []                      # LLM-only + complexity heuristics for now
+    machine_checkable:
+      - nested-loop / quadratic complexity heuristics
+    llm_judgment:
+      - N+1 queries, unbounded allocations, blocking I/O on hot paths
+      - resource leaks (unclosed handles/connections)
+    priority: 5
+
+  - id: testing
+    title: Testing & Robustness
+    model_tier: standard
+    standards: [Test-Pyramid, Coverage, Mutation-Testing]
+    applies_when: ["**/*"]
+    tools: [coverage, pytest]      # coverage % / test presence; mutation optional/thorough
+    machine_checkable:
+      - test presence / coverage percentage
+      - untested modules
+    llm_judgment:
+      - test meaningfulness (assertions vs smoke)
+      - missing edge-case / failure-path coverage
+    priority: 4
+
+  - id: supply-chain
+    title: Supply Chain & License
+    model_tier: standard
+    standards: [SLSA-v1.0, SBOM-SPDX, SBOM-CycloneDX]
+    applies_when:
+      - "**/requirements*.txt"
+      - "**/pyproject.toml"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "**/pnpm-lock.yaml"
+      - "**/go.mod"
+      - "**/Cargo.toml"
+    tools: [osv-scanner, trivy]
+    machine_checkable:
+      - known-vulnerable dependency versions (CVE/GHSA)
+      - license identification
+    llm_judgment:
+      - license compatibility with project intent
+      - transitive-dependency risk posture
+    priority: 6
+
+  - id: accessibility
+    title: Accessibility & Docs
+    model_tier: standard
+    standards: [WCAG-2.2]
+    applies_when:
+      - "**/*.html"
+      - "**/*.jsx"
+      - "**/*.tsx"
+      - "**/*.vue"
+      - "**/*.svelte"
+    tools: []                      # axe/contrast checks wired later; LLM-only for now
+    machine_checkable:
+      - missing alt text presence
+      - form-label association
+    llm_judgment:
+      - alt-text quality / semantics
+      - keyboard-nav & ARIA correctness in context
+    priority: 7
+
+# Depth presets — the run-time cost/precision dial.
+depth_presets:
+  quick:
+    voting: false               # single inspector pass, no voters
+    voters_per_aspect: 1
+    critic: high_severity_only  # only critical/high findings go through the critic
+    tools: available            # run whatever is installed, skip slow ones (codeql, mutation)
+    skip_slow_tools: [codeql, mutation]
+  thorough:
+    voting: adaptive            # vote on high-severity or single-source findings
+    voters_per_aspect: 3
+    critic: all                 # every candidate finding must survive the critic
+    tools: available
+    skip_slow_tools: []

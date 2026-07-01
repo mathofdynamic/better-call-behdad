@@ -1,0 +1,71 @@
+# Better-call-behdad — Category-level false-positive exclusions
+#
+# WHY THIS FILE EXISTS: "Noise is the enemy, not missed bugs." Both research efforts
+# found that AI review tools drown users in low-value findings. This list strips
+# known-noisy CATEGORIES *before* the LLM reasons about them, and gives the critic a
+# rubric for demoting/rejecting whole classes of low-signal findings.
+# Pattern borrowed from anthropics/claude-code-security-review.
+#
+# Precedence: a finding is excluded only if it matches an `exclude` rule AND does NOT
+# match a `keep_if` escape hatch (proven impact always wins over category exclusion).
+
+version: "1.0"
+
+# --- Whole categories suppressed unless concrete impact is proven ---
+exclude:
+
+  - id: unproven-dos
+    reason: "Denial-of-service claims without a demonstrated unbounded/attacker-controlled path are speculative."
+    matches_canonical: [CWE-400, CWE-770, CWE-834]
+    keep_if: "attacker-controlled input reaches an unbounded loop/allocation with no limit (must be shown in evidence)"
+
+  - id: generic-input-validation
+    reason: "'Add input validation' with no reachable sink or concrete exploit is boilerplate noise."
+    matches_keywords: ["missing input validation", "should validate input", "sanitize the input"]
+    keep_if: "the unvalidated value reaches an injection/deserialization/path sink (sink named in evidence)"
+
+  - id: open-redirect-low
+    reason: "Open-redirect flagged without user-controlled destination reaching a redirect sink is usually a FP."
+    matches_canonical: [CWE-601]
+    keep_if: "user-controlled value flows into an HTTP redirect/Location without allowlist"
+
+  - id: pure-style-nits
+    reason: "Formatting, naming preference, and subjective style are not audit findings. Linters own these."
+    matches_severity: [info]
+    matches_keywords: ["consider renaming", "style", "formatting", "prefer", "could be cleaner", "nitpick"]
+    keep_if: "never (style is out of scope for the audit report)"
+
+  - id: optimization-suggestion
+    reason: "Micro-optimizations without a measured hot path are speculative and low-value."
+    matches_keywords: ["could be more efficient", "consider caching", "minor performance"]
+    keep_if: "the code is on a proven hot path (loop over large N, request handler) AND complexity is super-linear"
+
+  - id: rate-limiting-generic
+    reason: "'Add rate limiting' as a blanket suggestion is design advice, not a defect."
+    matches_keywords: ["add rate limiting", "should be rate limited"]
+    keep_if: "an unauthenticated, expensive, attacker-reachable endpoint is named in evidence"
+
+  - id: missing-docs-generic
+    reason: "'Add a docstring/comment' is low-signal unless the symbol is public API with confusing behavior."
+    matches_keywords: ["missing docstring", "add a comment", "needs documentation"]
+    keep_if: "public API surface with non-obvious contract or side effects"
+
+# --- Path/file globs never audited (generated, vendored, fixtures) ---
+exclude_paths:
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/vendor/**"
+  - "**/*.min.js"
+  - "**/*.generated.*"
+  - "**/migrations/**"           # framework-generated; opt-in only
+  - "**/__pycache__/**"
+  - "**/.git/**"
+
+# --- Test/fixture files: security & secret rules relaxed (fake creds expected) ---
+relaxed_in_tests:
+  path_globs: ["**/test/**", "**/tests/**", "**/*_test.*", "**/*.test.*", "**/*.spec.*", "**/fixtures/**"]
+  relax_aspects: [security]      # a hardcoded 'password123' in a test fixture is not a finding
+  keep_if: "the test file itself contains a real secret matching a live-credential pattern (high-entropy + known prefix)"

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://better-call-behdad/schemas/report.schema.json",
+  "title": "Behdad Audit Report",
+  "description": "The manager's consolidated output: a Full Diagnostic Report plus a Prioritized Action Report, ready to present to the human at the confirmation gate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "target", "scope", "summary", "findings", "action_plan"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "description": "Absolute path of the audited project." },
+        "is_git": { "type": "boolean", "default": false },
+        "commit": { "type": "string", "default": "" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "description": "What the run actually covered — surfaced honestly, including gaps.",
+      "additionalProperties": false,
+      "required": ["languages", "aspects_run", "depth"],
+      "properties": {
+        "languages": { "type": "array", "items": { "type": "string" } },
+        "aspects_run": { "type": "array", "items": { "type": "string" } },
+        "aspects_skipped": {
+          "type": "array",
+          "description": "Aspects that were not run and why (e.g. accessibility: no UI code found).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": { "aspect": { "type": "string" }, "reason": { "type": "string" } }
+          },
+          "default": []
+        },
+        "tools_used": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "tools_missing": {
+          "type": "array",
+          "description": "Scanners that were unavailable — recall is reduced for their coverage. Reported loudly, never hidden.",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "depth": { "type": "string", "enum": ["quick", "thorough"] },
+        "files_scanned": { "type": "integer", "default": 0 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Headline of the Full Diagnostic Report.",
+      "additionalProperties": false,
+      "required": ["headline", "counts_by_severity"],
+      "properties": {
+        "headline": { "type": "string", "description": "One-paragraph plain-language verdict on the project's health." },
+        "counts_by_severity": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" },
+          "description": "e.g. {critical: 2, high: 5, medium: 8, low: 3}"
+        },
+        "counts_by_aspect": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" },
+          "default": {}
+        },
+        "overall_confidence": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "All verified findings (rejected/abstained ones excluded from the report but retained in the audit trail).",
+      "items": { "$ref": "finding.schema.json" }
+    },
+    "action_plan": {
+      "type": "array",
+      "description": "The Prioritized Action Report — ordered remediation steps the human confirms before anything is applied.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["order", "finding_id", "action", "risk", "auto_fixable"],
+        "properties": {
+          "order": { "type": "integer", "description": "1-based priority rank." },
+          "finding_id": { "type": "string" },
+          "action": { "type": "string", "description": "What to do, in plain language." },
+          "risk": { "type": "string", "description": "What happens if left unfixed." },
+          "auto_fixable": { "type": "boolean", "description": "Whether Behdad has a proposed diff it can apply on confirmation." },
+          "effort": { "type": "string", "enum": ["trivial", "small", "medium", "large"], "default": "small" }
+        }
+      }
+    },
+    "audit_trail": {
+      "type": "object",
+      "description": "Provenance for reproducibility and debugging.",
+      "additionalProperties": false,
+      "properties": {
+        "started_at": { "type": "string", "default": "" },
+        "finished_at": { "type": "string", "default": "" },
+        "rejected_count": { "type": "integer", "default": 0 },
+        "abstained_count": { "type": "integer", "default": 0 },
+        "suppressed_count": { "type": "integer", "default": 0 }
+      },
+      "default": {}
+    }
+  }
+}

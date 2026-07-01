@@ -1,0 +1,5 @@
+# Seeded manifest for supply-chain testing.
+# EXPECT-VULN: this old requests version has known CVEs (osv-scanner should flag it when installed).
+requests==2.19.0
+# NOISE: a current, clean pinned dependency that must NOT be flagged.
+click==8.1.7
