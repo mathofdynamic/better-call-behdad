@@ -78,6 +78,10 @@ numbers, and honest limitations (it was the author's own project; more blind tri
 
 ## How it works
 
+<p align="center">
+  <img src="assets/how-it-works.png" alt="How Better Call Behdad works: one command spins up a manager agent that dispatches 7 parallel inspectors, a critic gate drops false positives, findings are aggregated into two reports, and fixes are applied only after you approve" width="100%">
+</p>
+
 > 🗺️ **[Explore the flow interactively on MarkChart →](https://markchart.pages.dev/s/5DTWTdHFSHE)**
 > &nbsp;(source: [`docs/flow.markchart`](docs/flow.markchart))
 
