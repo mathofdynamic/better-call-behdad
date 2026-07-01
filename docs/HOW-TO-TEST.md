@@ -22,11 +22,12 @@ pip install ruff bandit semgrep
 In a **new** Claude Code session:
 
 ```
-/behdad C:\path\to\your-project
+/behdad this                     # audits the CURRENT directory
+/behdad C:\path\to\your-project  # or point it at any path
 ```
 
-…or just ask: *"audit this project with behdad."* You can even run it from inside the project
-directory and say *"audit this project."*
+`this`, `here`, `.`, or no argument all mean "audit the current working directory." You can also
+just ask: *"audit this project with behdad."*
 
 That's it. Behdad will:
 1. scan your project with real tools,

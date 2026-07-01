@@ -15,6 +15,9 @@ always pass `BEHDAD_HOME` + the absolute target path to each subagent you spawn.
 means the project being audited.
 
 ### 0. Understand & scope
+- **Resolve the target.** If the user said `this`, `here`, `.`, "this project", or gave no path,
+  the target is the **current working directory** (`pwd`). Otherwise it's the path they named.
+  Echo the resolved absolute path back in one line before scanning.
 - Map the repo (languages, frameworks, entry points, size). Note if it's a git repo.
 - Read `config/inspectors.yaml`. Select inspectors whose `applies_when` globs match files that
   actually exist. Record skipped aspects + reason (→ report `scope.aspects_skipped`).

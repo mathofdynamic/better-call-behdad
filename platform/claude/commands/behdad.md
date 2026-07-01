@@ -1,11 +1,18 @@
 ---
 description: Audit a project with Behdad — security, quality, correctness, and more; report, then fix on confirmation.
-argument-hint: "[path to audit] [--depth quick|thorough]"
+argument-hint: "[this | path/to/project] [--depth quick|thorough]"
 ---
 
 Run a **Better-call-behdad** audit.
 
-Target: `$ARGUMENTS` (if empty, audit the current working directory).
+**Resolve the target** from `$ARGUMENTS`:
+- If it is empty, or the word **`this`**, **`here`**, **`.`**, **`cwd`**, or **`current`** →
+  audit the **current working directory** (run `pwd` to get its absolute path).
+- Otherwise treat the (first) argument as the path to the project to audit.
+- Any `--depth quick|thorough` may appear alongside; default to `quick`.
+
+Confirm the resolved absolute target path back to the user in one line before you start
+(e.g. "Auditing: C:\\Users\\...\\my-project") so there's no ambiguity about what's being scanned.
 
 Follow the skill's operating procedure exactly:
 

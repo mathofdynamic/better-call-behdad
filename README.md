@@ -152,7 +152,8 @@ python platform/claude/install.py        # installs the skill, agents, /behdad c
 ```
 Then, in a **new** session:
 ```
-/behdad path/to/your/project
+/behdad this                 # audits the current directory
+/behdad path/to/your/project # …or any path
 ```
 …or just ask: *"audit this project with behdad."*
 
