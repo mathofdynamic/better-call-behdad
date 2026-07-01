@@ -52,6 +52,29 @@ for a lot of trust, using a layered false-positive defense (details [below](#how
 - **Abstains when unsure** instead of inventing a problem.
 - **Learns from your dismissals** so the same false positive never comes back.
 
+## Proven on a real project
+
+We pointed Behdad at [**MarkChart**](https://github.com/mathofdynamic/markchart) — a real React +
+Cloudflare Workers app with auth, a database, and an AI endpoint. In one `/behdad` run it reported
+**14 issues** (2 high, 9 medium, 3 low), including two subtle logic bugs no linter catches:
+
+- an API endpoint that returned **`200 OK` but silently saved nothing** on an ownership collision, and
+- a Markdown exporter that **mislabeled normal branches as "loop-back"** because it used traversal
+  order instead of graph structure.
+
+**The developer then fixed all 14 — in a commit literally titled
+[*"Fix Behdad audit findings"*](https://github.com/mathofdynamic/markchart/commit/bebcbed).**
+Independent re-review of the patched code confirms every issue resolved, with **0 confirmed false
+positives** and a correct **clean-on-security** verdict.
+
+<p align="center">
+  <img src="assets/behdad-suggests.png" alt="Behdad's diagnostic report on MarkChart" width="49%">
+  <img src="assets/behdad-reports.png" alt="Behdad's prioritized fix plan" width="49%">
+</p>
+
+📄 **[Read the full case study →](docs/CASE-STUDY-markchart.md)** — with the evidence, the exact
+numbers, and honest limitations (it was the author's own project; more blind trials to come).
+
 ## How it works
 
 > 🗺️ **[Explore the flow interactively on MarkChart →](https://markchart.pages.dev/s/5DTWTdHFSHE)**
