@@ -15,7 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-supported-6c47ff" alt="Claude Code">
   <img src="https://img.shields.io/badge/OpenAI%20Codex-supported-10a37f" alt="Codex">
-  <img src="https://img.shields.io/badge/eval-18%2F18%20green-brightgreen" alt="eval">
+  <img src="https://img.shields.io/badge/eval-89%2F89%20green-brightgreen" alt="eval">
 </p>
 
 ---
@@ -117,9 +117,9 @@ numbers, and honest limitations (it was the author's own project; more blind tri
 
 | Inspector | Looks for | Grounded by |
 |-----------|-----------|-------------|
-| 🔒 **Security** | Injection, secrets, weak crypto, broken access control, insecure design | Semgrep, Bandit, Gitleaks, CodeQL |
-| 🧱 **Quality** | SOLID violations, complexity, real maintainability smells (never style nits) | Ruff, ESLint, complexity metrics |
-| 🧠 **Logic** | Off-by-one, inverted conditions, mishandled errors, contract violations | Type-checkers (weak tooling → strictest verification) |
+| 🔒 **Security** | Injection, secrets, weak crypto, broken access control, insecure design | Semgrep, Bandit, Gitleaks |
+| 🧱 **Quality** | SOLID violations, complexity, real maintainability smells (never style nits) | Ruff, ESLint, built-in complexity metrics |
+| 🧠 **Logic** | Off-by-one, inverted conditions, mishandled errors, contract violations | mypy (weak tooling → strictest verification) |
 | ⚡ **Performance** | N+1 queries, super-linear loops, unbounded resources on hot paths | Heuristics + reasoning |
 | 🧪 **Testing** | Untested critical paths, assertion-free tests, missing edge cases | Coverage, test presence |
 | 📦 **Supply-chain** | Known-vulnerable dependencies, license compatibility, dependency hygiene | OSV-Scanner, Trivy |
@@ -127,6 +127,19 @@ numbers, and honest limitations (it was the author's own project; more blind tri
 
 Inspectors only run when they're relevant (no accessibility pass on a repo with no UI), which keeps
 runs fast and cheap.
+
+### Language coverage (honest tiers)
+
+| Tier | Languages | Deterministic grounding |
+|------|-----------|-------------------------|
+| **Full** | Python | semgrep (`p/default` + `p/python`), bandit, ruff, mypy, built-in complexity metrics |
+| **Good** | JavaScript / TypeScript | semgrep (`p/javascript`), eslint (when the target has a config) |
+| **Basic** | Go | semgrep (`p/golang`), gosec (when installed) |
+| **Generic** | Java, Ruby, PHP, C/C++, Rust | language-specific semgrep packs where they exist, else `p/default` |
+| **All** | every repo | gitleaks (secrets), osv-scanner + trivy (dependencies/SCA) |
+
+LLM judgment findings work on any language; the tiers above describe scanner *grounding* only.
+Missing tools are always reported as an explicit reduced-recall caveat, never hidden.
 
 ### What you get: two reports
 
@@ -160,8 +173,15 @@ This is the heart of the product. Each finding runs a gauntlet before it ever re
 Behdad **never edits your code before you approve it** — and that's enforced at the execution layer,
 not just promised by a prompt:
 
-- On Claude Code, a `PreToolUse` hook **hard-blocks** every write/edit/shell mutation until you
-  approve the action report. The model literally cannot bypass it.
+- On **Claude Code**, a `PreToolUse` hook **hard-blocks** every write/edit/shell mutation until
+  you approve the action report — with a **default-deny** posture: while the gate is closed, only
+  an explicit allowlist of read-only commands, scanners, and Behdad's own scripts may run
+  (interpreter one-liners, here-docs, and comment tricks are denied by construction, and the
+  PowerShell tool is gated too). The gate's decision table is pinned by 50 regression tests in
+  the eval harness.
+- On **Codex**, inspection runs under the read-only sandbox; the fix phase relies on Codex's own
+  approval prompts — there is no Behdad-level execution gate there. Run audits with
+  `--sandbox read-only` and only grant write approval after reviewing the action report.
 - Approved fixes are applied on a **snapshot**, verified against your tests/scanners, and
   **automatically rolled back** if anything regresses. A broken fix is reported as rolled-back —
   never as success.
@@ -200,7 +220,7 @@ See [`INSTALL.md`](INSTALL.md#openai-codex) for the details.
 
 ### Optional but recommended — install the scanners for full recall
 ```bash
-pip install ruff bandit semgrep          # plus gitleaks, osv-scanner, trivy from their installers
+pip install ruff bandit semgrep mypy     # plus gitleaks, osv-scanner, trivy, gosec from their installers
 ```
 Behdad works without them; it just reports **reduced recall** honestly rather than pretending.
 
@@ -232,16 +252,25 @@ host gets only a thin binding layer. The same skill runs on Claude Code and Code
 
 ## Is it actually tested?
 
-Yes — the deterministic backbone is covered by an evaluation harness that runs against a **seeded
-repo** containing both planted bugs and deliberate *noise-traps* (benign code designed to bait false
-positives):
+Yes — at two levels.
+
+**Deterministic backbone** — an evaluation harness runs against a **seeded repo** (Python + JS)
+containing planted bugs and deliberate *noise-traps* (benign code designed to bait false positives):
 
 ```bash
-python tests/eval/run_eval.py      # 18/18 checks green
+python tests/eval/run_eval.py      # 89/89 checks green (--strict for CI)
 ```
-It verifies the scanners find the planted SQLi / command-injection / weak-crypto / hardcoded-secret,
-that the noise-traps are **not** flagged, that dedup/ranking/gating behave, and that remediation
-rolls back a bad fix. The multi-agent orchestration is validated in live agent sessions.
+It verifies the scanners find every planted bug, that noise-traps are **not** flagged, that
+dedup/ranking/gating/validation behave, that the **fix-gate blocks every known bypass class**
+(50 pinned decision-table cases, including PowerShell and interpreter one-liners), and that
+remediation rolls back a bad fix.
+
+**The LLM layer too** — `/behdad eval` runs the *full* pipeline (inspectors, critic, manager)
+against the seeded repo and scores it automatically against an exhaustive ground truth
+([`ground-truth.json`](tests/fixtures/seeded-repo/ground-truth.json)), including three
+**judgment-only logic bugs no scanner can see** (off-by-one, inverted condition, silent failure).
+First recorded run: recall 1.0, judgment-recall 1.0, precision 1.0, zero trap hits — see
+[`docs/BENCHMARK.md`](docs/BENCHMARK.md) for the protocol, honesty rules, and running results.
 
 ## Grounded in research, not vibes
 

@@ -57,7 +57,13 @@ safety net before any tool touches your code.
 
 ### For maintainers: rigorous benchmarking (optional)
 
-If you want hard precision/recall numbers across many projects (not needed for normal use), there's
-a benchmark harness under [`tests/eval/`](../tests/eval): `measure.py` (before/after snapshots,
-triage, scoring) and `run_eval.py` (the deterministic KPI scorecard). These are for evaluating
-Behdad itself, not for end users auditing their code.
+If you want hard precision/recall numbers (not needed for normal use):
+
+- **`/behdad eval`** — runs the full pipeline (including the inspectors and critic) against the
+  seeded repo and scores it automatically against an exhaustive ground truth: recall,
+  **judgment_recall** (logic bugs no scanner sees), precision, noise-trap hits, critic kill rate.
+- **`python tests/eval/run_eval.py [--strict]`** — the deterministic KPI scorecard (scanner
+  normalization, aggregation, the fix gate's decision table, the scorer itself). `--strict`
+  turns missing-scanner skips into failures for CI.
+- **`tests/eval/measure.py`** — triage sheet + scoring for real-world (non-seeded) repos.
+- **[`docs/BENCHMARK.md`](BENCHMARK.md)** — the blind-trial protocol and the running results table.

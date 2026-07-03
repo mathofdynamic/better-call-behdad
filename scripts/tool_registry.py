@@ -106,19 +106,28 @@ TOOLS: dict[str, Tool] = {
         languages=["*"],
         install="https://aquasecurity.github.io/trivy/  (or: brew install trivy)",
     ),
-    # --- Advanced / gated tools (not auto-run in a default scan) ---
+    "gosec": Tool(
+        id="gosec", binary="gosec", kind="sast", output="json",
+        languages=["go"],
+        install="go install github.com/securego/gosec/v2/cmd/gosec@latest",
+    ),
+    # mypy is purely static (parses, never imports target code), so it is safe on untrusted
+    # repos and runs in the default scan as the logic inspector's deterministic backstop.
+    "mypy": Tool(
+        id="mypy", binary="mypy", kind="types", output="json",
+        languages=["python"], install="pip install mypy",
+    ),
+    # --- Registered but NOT auto-invoked (no command builder in run_scanners.py) ---
+    # codeql needs a DB build + query packs; wiring it is future work — do not advertise it
+    # as active grounding anywhere until a builder exists.
     "codeql": Tool(
         id="codeql", binary="codeql", kind="sast", output="sarif",
         languages=["python", "javascript", "typescript", "go", "java", "cpp", "csharp", "ruby"],
         install="https://github.com/github/codeql-cli-binaries/releases",
-        slow=True,  # requires DB build; only in `thorough` depth
+        slow=True,
     ),
-    # Type-checkers import/analyze code; treated as ground truth for the logic inspector but
-    # gated because they can execute import-time side effects in the target project.
-    "mypy": Tool(
-        id="mypy", binary="mypy", kind="types", output="json",
-        languages=["python"], install="pip install mypy", executes_code=True,
-    ),
+    # pyright/tsc are also static, but node-based and config-sensitive (tsconfig discovery);
+    # they stay gated until they get builders.
     "pyright": Tool(
         id="pyright", binary="pyright", kind="types", output="json",
         languages=["python"], install="npm install -g pyright", executes_code=True,

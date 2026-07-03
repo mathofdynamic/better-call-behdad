@@ -105,10 +105,15 @@ def apply_fix(target: Path, patch_text: str, verify: str | None, *, timeout: int
             return {"applied": False, "verified": False, "rolled_back": False,
                     "files": files, "error": f"git apply failed: {err.strip()[:400]}"}
 
-        # Verify.
+        # Verify. If no command was given, try to auto-detect the project's test runner —
+        # an unverified fix must be reported as UNVERIFIED, never allowed to read as success.
+        if not verify:
+            verify = _detect_verify(target)
         if not verify:
             return {"applied": True, "verified": None, "rolled_back": False, "files": files,
-                    "note": "applied without a verification command (no --verify given)"}
+                    "status": "UNVERIFIED",
+                    "note": "UNVERIFIED: no --verify command given and no test runner detected "
+                            "(pytest/npm test/cargo test/go test). Review this change manually."}
 
         vrc, vout, verr = _run(verify, cwd=str(target), shell=True, timeout=timeout)
         if vrc == 0:
@@ -120,6 +125,26 @@ def apply_fix(target: Path, patch_text: str, verify: str | None, *, timeout: int
                 "verify_rc": vrc,
                 "verify_output": (vout + "\n" + verr)[-800:].strip(),
                 "note": "verification failed; changes were rolled back"}
+
+
+def _detect_verify(target: Path) -> str | None:
+    """Best-effort test-runner detection (presence probes only — no execution here)."""
+    import shutil as _sh
+    if (any((target / d).is_dir() and any(p.name.startswith("test") for p in (target / d).glob("*.py"))
+            for d in ("tests", "test")) and _sh.which("pytest")):
+        return "pytest -q"
+    pkg = target / "package.json"
+    if pkg.exists() and _sh.which("npm"):
+        try:
+            if "test" in (json.loads(pkg.read_text(encoding="utf-8")).get("scripts") or {}):
+                return "npm test --silent"
+        except Exception:
+            pass
+    if (target / "Cargo.toml").exists() and _sh.which("cargo"):
+        return "cargo test --quiet"
+    if (target / "go.mod").exists() and _sh.which("go"):
+        return "go test ./..."
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:

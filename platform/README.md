@@ -15,7 +15,7 @@ re-run the generators.
 | Rules & schemas | `config/**`, `schemas/**` | same | same |
 | Model / effort tiering | — | frontmatter `model:` | `model_reasoning_effort` |
 | Structured return | prompt-specified | prompt-specified | `output_schema_ref` (enforced) |
-| Fix gate | — | `PreToolUse` hook (exit 2) | `sandbox_mode` + approval policy |
+| Fix gate | — | `PreToolUse` hook, default-deny (exit 2) | none — read-only sandbox + Codex approval prompts only |
 | Invocation | "audit with behdad" | `/behdad` command | agent invocation |
 
 ## Claude Code (`platform/claude/`)

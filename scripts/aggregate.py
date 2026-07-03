@@ -9,45 +9,111 @@ This module takes the findings emitted by inspectors + the critic and determinis
   4. ranks, and
   5. emits a report skeleton conforming to schemas/report.schema.json.
 
-The numeric constants MIRROR config/severity.yaml (kept here so the engine is stdlib-only and
-needs no YAML parser). If you change severity.yaml, update SEVERITY below to match. A sync test
-lives in tests/eval/. Stdlib only.
+The numeric model comes from config/severity.yaml, parsed AT RUNTIME by the minimal flat-YAML
+reader below (the file is plain `key: value` two levels deep — no YAML dependency needed). The
+literals in _DEFAULTS are only the fail-safe if the file is missing or unreadable. Stdlib only.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
-# --- constants mirrored from config/severity.yaml -----------------------------------------
+import validate as contract  # sibling module; sys.path fix below for direct execution
 
-SEVERITY_WEIGHT = {"critical": 1.00, "high": 0.75, "medium": 0.50, "low": 0.25, "info": 0.05}
+# --- risk model, loaded from config/severity.yaml ------------------------------------------
 
-EPSS_DEFAULT = 0.30
-EPSS_CATEGORY_PRIORS = {
-    "CWE-89": 0.70, "CWE-79": 0.60, "CWE-78": 0.70, "CWE-22": 0.55,
-    "CWE-502": 0.65, "CWE-798": 0.60, "CWE-306": 0.55,
+_DEFAULTS = {
+    "severity_weight": {"critical": 1.00, "high": 0.75, "medium": 0.50, "low": 0.25, "info": 0.05},
+    "epss": {"default_when_unknown": 0.30,
+             "category_priors": {"CWE-89": 0.70, "CWE-79": 0.60, "CWE-78": 0.70, "CWE-22": 0.55,
+                                 "CWE-502": 0.65, "CWE-798": 0.60, "CWE-306": 0.55}},
+    "environmental": {"reachable_from_entrypoint": 1.00, "reachable_internal_only": 0.60,
+                      "reachability_unknown": 0.50, "unreachable_dead_code": 0.10},
+    "non_security_scale": {"security": 1.00, "logic": 0.90, "supply-chain": 0.90,
+                           "quality": 0.55, "testing": 0.55, "performance": 0.60,
+                           "accessibility": 0.50},
+    "confidence_gate": {"min_to_report": 0.55, "ground_truth_bypass": True,
+                        "abstain_shown": False},
 }
 
-ENVIRONMENTAL = {
-    "reachable_from_entrypoint": 1.00,
-    "reachable_internal_only": 0.60,
-    "reachability_unknown": 0.50,
-    "unreachable_dead_code": 0.10,
-}
+_KV_RE = re.compile(r"^(\s*)([\w.-]+):\s*(.*?)\s*$")
 
-NON_SECURITY_SCALE = {
-    "security": 1.00, "logic": 0.90, "supply-chain": 0.90,
-    "quality": 0.55, "testing": 0.55, "performance": 0.60, "accessibility": 0.50,
-}
 
-MIN_TO_REPORT = 0.55
-GROUND_TRUTH_BYPASS = True
-ABSTAIN_SHOWN = False
+def _coerce(raw: str):
+    raw = raw.split("  #")[0].split("\t#")[0].strip()
+    if raw.endswith("#"):
+        raw = raw[:-1].strip()
+    low = raw.lower()
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    try:
+        return float(raw) if "." in raw else int(raw)
+    except ValueError:
+        return raw.strip("\"'")
+
+
+def _load_flat_yaml(path: Path) -> dict:
+    """Parse the strictly two/three-level `key: value` shape of severity.yaml. Not a general
+    YAML parser — the eval pins the shape."""
+    root: dict = {}
+    stack: list[tuple[int, dict]] = [(-1, root)]
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        m = _KV_RE.match(line)
+        if not m:
+            continue
+        indent, key, value = len(m.group(1)), m.group(2), m.group(3)
+        # strip trailing inline comment on valued lines
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        parent = stack[-1][1]
+        if value == "" or value.startswith("#"):
+            child: dict = {}
+            parent[key] = child
+            stack.append((indent, child))
+        else:
+            parent[key] = _coerce(value)
+    return root
+
+
+def _risk_model() -> dict:
+    cfg_path = Path(__file__).resolve().parent.parent / "config" / "severity.yaml"
+    try:
+        parsed = _load_flat_yaml(cfg_path)
+    except Exception:
+        return _DEFAULTS
+    model = {}
+    for section, default in _DEFAULTS.items():
+        got = parsed.get(section)
+        model[section] = got if isinstance(got, dict) and got else default
+    # nested epss.category_priors fallback
+    if not isinstance(model["epss"].get("category_priors"), dict):
+        model["epss"]["category_priors"] = _DEFAULTS["epss"]["category_priors"]
+    return model
+
+
+_MODEL = _risk_model()
+SEVERITY_WEIGHT = _MODEL["severity_weight"]
+EPSS_DEFAULT = _MODEL["epss"].get("default_when_unknown", 0.30)
+EPSS_CATEGORY_PRIORS = _MODEL["epss"]["category_priors"]
+ENVIRONMENTAL = _MODEL["environmental"]
+NON_SECURITY_SCALE = _MODEL["non_security_scale"]
+MIN_TO_REPORT = _MODEL["confidence_gate"].get("min_to_report", 0.55)
+GROUND_TRUTH_BYPASS = bool(_MODEL["confidence_gate"].get("ground_truth_bypass", True))
+ABSTAIN_SHOWN = bool(_MODEL["confidence_gate"].get("abstain_shown", False))
 
 SEC_ASPECTS = {"security", "supply-chain"}
+
+# Findings for the same defect rarely land on the exact same line across tools (a scanner
+# anchors the sink, the LLM the function head). Merge within this window.
+DEDUP_LINE_WINDOW = 3
 
 
 # --- helpers ------------------------------------------------------------------------------
@@ -82,9 +148,16 @@ def risk_score(finding: dict) -> float:
     return round(base * epss * env * scale, 4)
 
 
-def _dedup_key(f: dict) -> tuple:
-    cids = tuple(sorted(f.get("canonical_ids") or []))
-    return (f.get("aspect"), cids, f.get("file", ""), f.get("line", 0))
+def _same_defect(a: dict, b: dict) -> bool:
+    """Proximity dedup: same aspect + file, lines within DEDUP_LINE_WINDOW, and overlapping
+    canonical IDs (or both ID-less). Exact-line matching under-merged scanner-vs-LLM duplicates
+    that anchor one line apart."""
+    if a.get("aspect") != b.get("aspect") or a.get("file", "") != b.get("file", ""):
+        return False
+    if abs((a.get("line") or 0) - (b.get("line") or 0)) > DEDUP_LINE_WINDOW:
+        return False
+    ca, cb = set(a.get("canonical_ids") or []), set(b.get("canonical_ids") or [])
+    return bool(ca & cb) if (ca or cb) else True
 
 
 def _reportable(f: dict) -> bool:
@@ -120,16 +193,24 @@ def _merge(group: list[dict]) -> dict:
 
 
 def aggregate(findings: list[dict]) -> dict:
+    # Contract check at the seam: a drifting inspector must not corrupt the report.
+    findings, invalid = contract.split_valid(findings)
+
     reportable = [f for f in findings if _reportable(f)]
     rejected = sum(1 for f in findings if f.get("status") == "rejected")
     abstained = sum(1 for f in findings if f.get("status") == "abstain")
     suppressed = sum(1 for f in findings if f.get("status") == "suppressed")
 
-    # Dedup.
-    groups: dict[tuple, list[dict]] = {}
-    for f in reportable:
-        groups.setdefault(_dedup_key(f), []).append(f)
-    merged = [_merge(g) for g in groups.values()]
+    # Proximity dedup: greedy grouping of same-defect findings (stable input order).
+    groups: list[list[dict]] = []
+    for f in sorted(reportable, key=lambda x: (x.get("file", ""), x.get("line") or 0)):
+        for g in groups:
+            if _same_defect(g[0], f):
+                g.append(f)
+                break
+        else:
+            groups.append([f])
+    merged = [_merge(g) for g in groups]
 
     # Rank: risk desc, then agreement*confidence desc.
     merged.sort(
@@ -154,7 +235,7 @@ def aggregate(findings: list[dict]) -> dict:
             "action": (f.get("explanation_for_humans") or f.get("title") or "Review and fix.")[:300],
             "risk": f"{f.get('severity','?')} / risk={f['risk_score']}",
             "auto_fixable": bool(f.get("proposed_fix")),
-            "effort": "small",
+            "effort": _effort(f),
         })
 
     return {
@@ -171,8 +252,21 @@ def aggregate(findings: list[dict]) -> dict:
             "rejected_count": rejected,
             "abstained_count": abstained,
             "suppressed_count": suppressed,
+            "invalid_count": len(invalid),
+            "invalid": invalid,
         },
     }
+
+
+def _effort(f: dict) -> str:
+    """Rough effort estimate from the concreteness/size of the proposed fix — not hardcoded."""
+    fix = f.get("proposed_fix") or ""
+    if not fix:
+        return "medium"  # no concrete patch: someone has to design the fix
+    lines = [l for l in fix.splitlines() if l.strip()]
+    if len(lines) <= 2:
+        return "trivial"
+    return "small" if len(lines) <= 15 else "medium"
 
 
 def _headline(by_sev: dict, total: int) -> str:

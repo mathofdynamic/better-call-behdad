@@ -53,6 +53,8 @@ python scripts/tool_registry.py   # shows which scanners are installed vs missin
 ## Safety model (read once)
 
 Behdad never edits your code before you approve. On Claude Code a `PreToolUse` hook hard-blocks
-writes until you confirm the action report; fixes are applied on a snapshot and **auto-rolled-back**
-if verification fails. Treat any repo you audit as the untrusted input it is — Behdad is hardened
+writes until you confirm the action report (default-deny over Bash **and** PowerShell); fixes are
+applied on a snapshot and **auto-rolled-back** if verification fails. On Codex there is **no
+Behdad-level execution gate** — inspection runs in the read-only sandbox and the fix phase relies
+on Codex's own approval prompts, so review the action report before granting any write approval. Treat any repo you audit as the untrusted input it is — Behdad is hardened
 against prompt injection from the code under review, but you remain in the loop for every change.

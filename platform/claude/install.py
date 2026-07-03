@@ -30,15 +30,25 @@ IGNORE = shutil.ignore_patterns(
     "*.jpg", "*.png", ".behdad", "node_modules", ".venv", "venv",
 )
 
-HOOK_MATCHER = "Write|Edit|MultiEdit|NotebookEdit|Bash"
+HOOK_MATCHER = "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell"
 
 
 def _gate_command() -> str:
     gate = (SKILL_DST / "platform" / "claude" / "hooks" / "gate.py").as_posix()
-    return f'python "{gate}"'
+    # sys.executable, not bare "python": many systems only have python3 / a versioned launcher.
+    return f'"{Path(sys.executable).as_posix()}" "{gate}"'
 
 
 def install() -> None:
+    # 0. Regenerate platform bindings so installs can never ship stale agent pointers.
+    for gen in (REPO / "platform" / "claude" / "agents" / "_generate_bindings.py",
+                REPO / "platform" / "codex" / "agents" / "_generate_bindings.py"):
+        import subprocess
+        r = subprocess.run([sys.executable, str(gen)], capture_output=True, text=True)
+        if r.returncode != 0:
+            print(f"WARNING: {gen.name} failed ({r.stderr.strip()[:200]}); "
+                  "installing committed bindings as-is.", file=sys.stderr)
+
     # 1. Skill directory (whole portable core + platform + tests, minus research/binaries).
     if SKILL_DST.exists():
         shutil.rmtree(SKILL_DST)

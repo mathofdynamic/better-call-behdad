@@ -1,13 +1,13 @@
 {
-  "_comment": "Merge this into .claude/settings.json (project) or ~/.claude/settings.json (user) to enable Behdad's execution-layer fix gate. The hook is inert unless BEHDAD_ACTIVE=1, so it is safe to leave installed. Adjust the path to gate.py to wherever the skill lives.",
+  "_comment": "Merge this into ~/.claude/settings.json (user) or .claude/settings.json (project) to enable Behdad's execution-layer fix gate. Replace <ABSOLUTE-PATH-TO-SKILL> with where this skill actually lives (e.g. C:/Users/you/.claude/skills/better-call-behdad). Do NOT use ${CLAUDE_PROJECT_DIR} here: during an audit that variable resolves to the AUDITED repo, not the skill, and the hook would silently not run. platform/claude/install.py writes the correct absolute path for you. The hook is inert unless BEHDAD_ACTIVE=1, so it is safe to leave installed.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/platform/claude/hooks/gate.py\""
+            "command": "python \"<ABSOLUTE-PATH-TO-SKILL>/platform/claude/hooks/gate.py\""
           }
         ]
       }

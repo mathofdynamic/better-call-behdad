@@ -15,7 +15,7 @@ inspectors:
     model_tier: standard          # cheaper tier for breadth; manager/critic use high tier
     standards: [OWASP-Top-10-2021, OWASP-ASVS, CWE-Top-25-2024, NIST-SSDF-800-218]
     applies_when: ["**/*"]         # always relevant
-    tools: [semgrep, bandit, gitleaks, codeql]   # codeql only in `thorough` depth
+    tools: [semgrep, bandit, gitleaks]   # codeql registered but not auto-invoked (no builder yet)
     machine_checkable:
       - injection sinks (SQLi/command/XSS) via taint rules
       - hardcoded secrets / credentials
@@ -31,7 +31,7 @@ inspectors:
     model_tier: standard
     standards: [ISO-IEC-25010, SOLID, Clean-Code]
     applies_when: ["**/*"]
-    tools: [ruff, eslint]          # plus complexity/MI metrics computed in run_scanners
+    tools: [ruff, eslint, complexity]   # complexity = stdlib AST McCabe pass in run_scanners (Python only)
     machine_checkable:
       - lint violations
       - cyclomatic complexity thresholds (McCabe > 10 warn, > 15 high)
@@ -48,7 +48,7 @@ inspectors:
     model_tier: standard
     standards: []                  # weakest deterministic backstop -> hardest critic gate
     applies_when: ["**/*"]
-    tools: [mypy, pyright, tsc]    # type-checkers as partial ground truth; may be absent
+    tools: [mypy]                  # static, safe, auto-run when installed; pyright/tsc not wired yet
     machine_checkable:
       - type errors
       - unreachable code / always-true conditions (linter-detected)
@@ -77,7 +77,8 @@ inspectors:
     model_tier: standard
     standards: [Test-Pyramid, Coverage, Mutation-Testing]
     applies_when: ["**/*"]
-    tools: [coverage, pytest]      # coverage % / test presence; mutation optional/thorough
+    tools: []                      # test PRESENCE comes from the repo map; coverage/pytest are
+                                   # not auto-run (they execute target code — unsafe by default)
     machine_checkable:
       - test presence / coverage percentage
       - untested modules

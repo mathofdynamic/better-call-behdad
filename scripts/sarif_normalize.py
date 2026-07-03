@@ -206,6 +206,46 @@ def from_osv(doc: dict, source: str = "osv-scanner") -> list[dict]:
     return out
 
 
+# --- gosec ---------------------------------------------------------------------------------
+
+_GOSEC_SEV = {"critical": "critical", "high": "high", "medium": "medium", "low": "low"}
+
+
+def from_gosec(doc: dict) -> list[dict]:
+    out = []
+    for issue in (doc or {}).get("Issues", []) or []:
+        line_raw = str(issue.get("line", "0"))
+        line = int(line_raw.split("-")[0]) if line_raw.split("-")[0].isdigit() else 0
+        cwe = (issue.get("cwe") or {}).get("id")
+        cids = [f"CWE-{cwe}"] if cwe else _cwes(issue.get("details", ""))
+        out.append(_finding(
+            "gosec", issue.get("rule_id", ""),
+            _band(issue.get("severity", ""), _GOSEC_SEV),
+            issue.get("file", ""), line, issue.get("details", ""), cids,
+        ))
+    return out
+
+
+# --- mypy (plain-text output; stable `file:line: severity: message [code]` lines) ----------
+
+_MYPY_LINE_RE = re.compile(r"^(.+?):(\d+)(?::\d+)?:\s*(error|warning|note):\s*(.+?)(?:\s+\[([\w-]+)\])?$")
+
+
+def from_mypy_text(text: str) -> list[dict]:
+    """Parse mypy's default text output (JSON output only exists on newer mypy versions).
+    Notes are dropped (context lines, not defects); type errors ground the logic inspector."""
+    out = []
+    for line in (text or "").splitlines():
+        m = _MYPY_LINE_RE.match(line.strip())
+        if not m or m.group(3) == "note":
+            continue
+        sev = "medium" if m.group(3) == "error" else "low"
+        code = m.group(5) or "type-error"
+        out.append(_finding("mypy", code, sev, m.group(1), int(m.group(2)),
+                            f"mypy: {m.group(4)}"))
+    return out
+
+
 # --- Dispatch -----------------------------------------------------------------------------
 
 # Maps a scanner id to (parser, output_kind). run_scanners.py uses this to normalize.
@@ -218,6 +258,7 @@ PARSERS = {
     "eslint": (from_eslint, "json"),
     "gitleaks": (from_gitleaks, "json"),
     "osv-scanner": (from_osv, "json"),
+    "gosec": (from_gosec, "json"),
 }
 
 

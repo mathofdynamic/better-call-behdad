@@ -3,7 +3,7 @@
 First read `agents/_common-finding-protocol.md`. You inspect the **security** aspect.
 
 **Standards:** OWASP Top 10 (2021), OWASP ASVS, CWE Top 25 (2024), NIST SSDF.
-**Ground-truth sources in your slice:** semgrep, bandit, gitleaks, codeql.
+**Ground-truth sources in your slice:** semgrep, bandit, gitleaks.
 
 ## Triage the scanner findings
 Confirm each at file:line: is the sink real, and can untrusted input reach it? Injection

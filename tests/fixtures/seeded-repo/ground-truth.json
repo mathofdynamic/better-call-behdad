@@ -1,0 +1,88 @@
+{
+  "_comment": "Exhaustive ground truth for the seeded repo. Every real defect is listed in `planted`; anything a run reports that matches nothing here is a false positive BY CONSTRUCTION (that is what makes automated precision possible — see scripts/score_run.py). `cwe` is a list of acceptable canonical IDs; judgment_only bugs carry no CWE and match by aspect + location.",
+  "schema_version": "1.0",
+  "planted": [
+    {
+      "id": "gt-001", "kind": "scanner", "aspect": "security",
+      "cwe": ["CWE-798", "CWE-259"], "file": "app.py", "line": 12, "line_tolerance": 3,
+      "title": "Hardcoded credentials (API key + DB password)",
+      "min_severity": "high", "judgment_only": false
+    },
+    {
+      "id": "gt-002", "kind": "scanner", "aspect": "security",
+      "cwe": ["CWE-89"], "file": "app.py", "line": 18, "line_tolerance": 3,
+      "title": "SQL injection via string formatting in get_user",
+      "min_severity": "high", "judgment_only": false
+    },
+    {
+      "id": "gt-003", "kind": "scanner", "aspect": "security",
+      "cwe": ["CWE-78"], "file": "app.py", "line": 24, "line_tolerance": 3,
+      "title": "Command injection via shell=True in run_backup",
+      "min_severity": "high", "judgment_only": false
+    },
+    {
+      "id": "gt-004", "kind": "scanner", "aspect": "security",
+      "cwe": ["CWE-327"], "file": "app.py", "line": 29, "line_tolerance": 3,
+      "title": "MD5 used for password hashing",
+      "min_severity": "medium", "judgment_only": false
+    },
+    {
+      "id": "gt-005", "kind": "scanner", "aspect": "security",
+      "cwe": ["CWE-95", "CWE-78"], "file": "app.py", "line": 34, "line_tolerance": 1,
+      "title": "eval on user-controlled string",
+      "min_severity": "medium", "judgment_only": false
+    },
+    {
+      "id": "gt-006", "kind": "scanner", "aspect": "security",
+      "cwe": ["CWE-95"], "file": "static/app.js", "line": 13, "line_tolerance": 2,
+      "title": "eval on user-controlled formula (JS)",
+      "min_severity": "medium", "judgment_only": false
+    },
+    {
+      "id": "gt-104", "kind": "judgment", "aspect": "security",
+      "cwe": ["CWE-79"], "file": "static/app.js", "line": 8, "line_tolerance": 3,
+      "title": "DOM XSS: URL query param written via innerHTML (no zero-config scanner rule catches this)",
+      "min_severity": "medium", "judgment_only": true
+    },
+    {
+      "id": "gt-101", "kind": "logic", "aspect": "logic",
+      "cwe": [], "file": "billing.py", "line": 26, "line_tolerance": 5,
+      "title": "Off-by-one: prorated_charge_cents bills one day too few (range(1, n))",
+      "min_severity": "medium", "judgment_only": true
+    },
+    {
+      "id": "gt-102", "kind": "logic", "aspect": ["logic", "security"],
+      "cwe": [], "file": "billing.py", "line": 35, "line_tolerance": 5,
+      "title": "Inverted condition: is_access_allowed grants access to LOCKED accounts",
+      "min_severity": "high", "judgment_only": true
+    },
+    {
+      "id": "gt-103", "kind": "logic", "aspect": ["logic", "quality"],
+      "cwe": [], "file": "billing.py", "line": 45, "line_tolerance": 5,
+      "title": "Silent failure: record_payment swallows OSError and reports success",
+      "min_severity": "high", "judgment_only": true
+    }
+  ],
+  "noise_traps": [
+    {
+      "id": "nt-001", "file": "app.py", "lines": [37, 43],
+      "why": "safe_total: a plain sum loop — not a performance issue"
+    },
+    {
+      "id": "nt-002", "file": "app.py", "lines": [45, 47],
+      "why": "format_name: string concatenation is not injection"
+    },
+    {
+      "id": "nt-003", "file": "billing.py", "lines": [51, 56],
+      "why": "days_in_invoice: intentional, documented half-open range — not an off-by-one"
+    },
+    {
+      "id": "nt-004", "file": "billing.py", "lines": [59, 67],
+      "why": "flush_ledger: except-log-RERAISE is correct handling — not a silent failure"
+    },
+    {
+      "id": "nt-005", "file": "static/app.js", "lines": [16, 19],
+      "why": "showStatus: textContent is the SAFE sink — not XSS"
+    }
+  ]
+}

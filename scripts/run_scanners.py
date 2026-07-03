@@ -165,17 +165,34 @@ def _parse(stdout: str):
         return None
 
 
-def build_command(tool_id: str, target: str, tmpdir: str, paths: list[str] | None):
+# Language-specific semgrep registry packs layered on top of p/default: the generic pack is
+# thin outside Python/JS, so each detected language pulls in its dedicated ruleset.
+SEMGREP_LANG_PACKS = {
+    "python": "p/python",
+    "javascript": "p/javascript", "typescript": "p/javascript",
+    "go": "p/golang", "java": "p/java", "ruby": "p/ruby", "php": "p/php",
+}
+
+
+def build_command(tool_id: str, target: str, tmpdir: str, paths: list[str] | None,
+                  langs: set[str] | None = None):
     """
     Return (argv, out_file). `paths` is the scoped file list for per-file tools; None = whole dir.
     Many scanners exit non-zero when they FIND issues — that's success, handled by the caller.
     """
     if tool_id == "semgrep":
-        # Use the named 'p/default' ruleset, NOT '--config auto': auto REQUIRES metrics to be on
-        # (telemetry), which we refuse for a tool auditing private code. p/default works with
-        # metrics off. Rules are fetched from the registry once, then cached.
+        # Use named rulesets, NOT '--config auto': auto REQUIRES metrics to be on (telemetry),
+        # which we refuse for a tool auditing private code. Named packs work with metrics off
+        # and are fetched from the registry once, then cached.
         tgts = paths if paths else [target]
-        return (["semgrep", "scan", "--sarif", "--config", "p/default", "--quiet",
+        configs = ["--config", "p/default"]
+        for lang in sorted(langs or set()):
+            pack = SEMGREP_LANG_PACKS.get(lang)
+            if pack and pack not in configs:
+                configs += ["--config", pack]
+        # --no-git-ignore: in a git repo semgrep defaults to TRACKED files only, silently
+        # skipping uncommitted code — exactly the code an audit most needs to see.
+        return (["semgrep", "scan", "--sarif", *configs, "--quiet", "--no-git-ignore",
                  "--metrics", "off", *tgts], None)
     if tool_id == "bandit":
         if paths:
@@ -196,7 +213,74 @@ def build_command(tool_id: str, target: str, tmpdir: str, paths: list[str] | Non
         return (["osv-scanner", "--format", "json", "-r", target], None)
     if tool_id == "trivy":
         return (["trivy", "fs", "--format", "sarif", "--quiet", target], None)
+    if tool_id == "gosec":
+        # ./... from the target dir; -quiet suppresses the banner; exit!=0 on findings is fine.
+        return (["gosec", "-fmt=json", "-quiet", "./..."], None)
+    if tool_id == "mypy":
+        # Text output (parsed by from_mypy_text): mypy's JSON output only exists on newer
+        # versions. --ignore-missing-imports keeps untyped third-party imports quiet.
+        tgts = paths if paths else [target]
+        return (["mypy", "--ignore-missing-imports", "--no-error-summary",
+                 "--no-color-output", *tgts], None)
     raise ValueError(f"no command builder for {tool_id}")
+
+
+# --- stdlib complexity pass (quality inspector's deterministic backstop) --------------------
+
+_BRANCH_NODES = ("If", "For", "While", "ExceptHandler", "With", "Assert",
+                 "BoolOp", "IfExp", "comprehension")
+
+COMPLEXITY_WARN = 10   # McCabe > 10 -> medium (matches config/inspectors.yaml)
+COMPLEXITY_HIGH = 15   # McCabe > 15 -> high
+
+
+def _cyclomatic(func_node) -> int:
+    """McCabe-ish cyclomatic complexity: 1 + branch points. BoolOp counts n-1 short-circuits."""
+    import ast
+    score = 1
+    for node in ast.walk(func_node):
+        name = type(node).__name__
+        if name == "BoolOp":
+            score += max(0, len(node.values) - 1)
+        elif name in _BRANCH_NODES:
+            score += 1
+    return score
+
+
+def complexity_findings(target: Path, paths: list[str] | None) -> list[dict]:
+    """Flag functions whose cyclomatic complexity crosses the configured thresholds.
+    Python-only (stdlib ast); other languages have no complexity backstop yet."""
+    import ast
+    files: list[Path]
+    if paths:
+        files = [Path(p) for p in paths if p.endswith(".py")]
+    else:
+        files = []
+        for root, dirs, names in os.walk(target):
+            dirs[:] = [d for d in dirs if d not in PRUNE_DIRS]
+            files += [Path(root) / n for n in names if n.endswith(".py")]
+    out: list[dict] = []
+    for fp in files:
+        try:
+            tree = ast.parse(fp.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if type(node).__name__ not in ("FunctionDef", "AsyncFunctionDef"):
+                continue
+            cc = _cyclomatic(node)
+            if cc <= COMPLEXITY_WARN:
+                continue
+            sev = "high" if cc > COMPLEXITY_HIGH else "medium"
+            out.append({
+                "source": "complexity", "rule_id": "cyclomatic-complexity",
+                "canonical_ids": [], "severity": sev,
+                "file": str(fp), "line": node.lineno,
+                "message": f"function '{node.name}' has cyclomatic complexity {cc} "
+                           f"(warn > {COMPLEXITY_WARN}, high > {COMPLEXITY_HIGH})",
+                "ground_truth": True, "status": "candidate",
+            })
+    return out
 
 
 def scan(target: Path, *, depth: str, timeout: int, allow_code_execution: bool,
@@ -237,9 +321,11 @@ def scan(target: Path, *, depth: str, timeout: int, allow_code_execution: bool,
     if langs:
         relevant.append("semgrep")
     if "python" in langs:
-        relevant += ["bandit", "ruff"]
+        relevant += ["bandit", "ruff", "mypy"]
     if {"javascript", "typescript"} & langs:
         relevant.append("eslint")
+    if "go" in langs:
+        relevant.append("gosec")
     relevant.append("gitleaks")
     if has_manifest:
         relevant += ["osv-scanner", "trivy"]
@@ -251,7 +337,7 @@ def scan(target: Path, *, depth: str, timeout: int, allow_code_execution: bool,
     def paths_for(tool_id: str) -> list[str] | None:
         if not scoped:
             return None
-        if tool_id in ("bandit", "ruff"):
+        if tool_id in ("bandit", "ruff", "mypy"):
             return _filter_ext(changed_files, PY_EXT, target)
         if tool_id == "eslint":
             return _filter_ext(changed_files, JS_EXT, target)
@@ -269,10 +355,19 @@ def scan(target: Path, *, depth: str, timeout: int, allow_code_execution: bool,
             scoped_paths = paths_for(tool_id)
             if scoped and scoped_paths is not None and not scoped_paths:
                 continue  # scoped run, but no changed file matches this tool's languages
-            argv, out_file = build_command(tool_id, str(target), tmpdir, scoped_paths)
-            rc, out, err = _run(argv, timeout=timeout)
+            argv, out_file = build_command(tool_id, str(target), tmpdir, scoped_paths, langs)
+            # gosec's ./... target is relative, so it must run from the target dir.
+            rc, out, err = _run(argv, timeout=timeout,
+                                cwd=str(target) if tool_id == "gosec" else None)
             if rc in (-1, -2, -3):
                 errors.append({"tool": tool_id, "error": err or f"rc={rc}"})
+                continue
+            if tool_id == "mypy":  # text output, not JSON
+                raw = norm.from_mypy_text(out)
+                for f in raw:
+                    f["file"] = _relpath(f.get("file", ""), target)
+                findings.extend(raw)
+                tools_used.append(tool_id)
                 continue
             if out_file:
                 try:
@@ -291,6 +386,15 @@ def scan(target: Path, *, depth: str, timeout: int, allow_code_execution: bool,
                 f["file"] = _relpath(f.get("file", ""), target)
             findings.extend(raw)
             tools_used.append(tool_id)
+
+    # Deterministic complexity backstop for the quality inspector (stdlib, Python files only).
+    if "python" in langs:
+        cx = complexity_findings(target, paths_for("bandit"))
+        for f in cx:
+            f["file"] = _relpath(f.get("file", ""), target)
+        if cx:
+            findings.extend(cx)
+        tools_used.append("complexity")
 
     return {
         "target": str(target),
